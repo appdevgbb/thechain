@@ -1,0 +1,6 @@
+default/.terraform.tfstate.lock.info
+default/000-variables.tf
+default/.terraform/*
+default/terraform.tfstate*
+default/.terraform.lock.hcl
+default/terraform.tfvars
