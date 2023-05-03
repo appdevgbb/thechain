@@ -1,18 +1,15 @@
 data "external" "token" {
   program = ["${path.module}/createtoken.sh"]
   query = {
-    registry  = "${azurerm_container_registry.acr.name}"
+    registry  = "${var.acr_name}"
     tokenName = "exampletoken"
   }
-  depends_on = [
-    azurerm_container_registry.acr
-  ]
 }
 
 /* Secrets */
 resource "azurerm_key_vault_secret" "spClientId" {
   name         = "AZURE-CLIENT-ID"
-  value        = azuread_service_principal.example.application_id
+  value        = var.service_principal_client_id
   key_vault_id = azurerm_key_vault.kv.id
   depends_on = [
     azurerm_key_vault_access_policy.currentUserAccesPolicy
@@ -21,7 +18,7 @@ resource "azurerm_key_vault_secret" "spClientId" {
 
 resource "azurerm_key_vault_secret" "spClientSecret" {
   name         = "AZURE-CLIENT-SECRET"
-  value        = azuread_service_principal_password.example.value
+  value        = var.service_principal_password
   key_vault_id = azurerm_key_vault.kv.id
   depends_on = [
     azurerm_key_vault_access_policy.currentUserAccesPolicy

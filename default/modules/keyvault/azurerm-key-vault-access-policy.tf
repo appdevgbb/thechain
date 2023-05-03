@@ -1,9 +1,7 @@
-data "azurerm_client_config" "current" {}
-
 resource "azurerm_key_vault_access_policy" "spAccessPolicy" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
-  object_id    = azuread_service_principal.example.object_id
+  object_id    = var.service_principal_object_id
 
   key_permissions = [
     "Get", "Sign"

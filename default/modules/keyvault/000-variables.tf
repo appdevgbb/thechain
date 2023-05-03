@@ -11,6 +11,26 @@ variable "kv_name" {
   default = ""
 }
 
+variable "acr_name" {
+  type = string
+  default = ""
+}
+
+variable "service_principal_object_id" {
+  type = string
+  default = ""
+}
+
+variable "service_principal_client_id" {
+  type = string
+  default = ""
+}
+
+variable "service_principal_password" {
+  type = string
+  default = ""
+}
+
 variable "resource_group" {
 }
 

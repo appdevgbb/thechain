@@ -1,8 +1,8 @@
 resource "azurerm_public_ip" "jumpbox-pip" {
-  name = "${local.hostname}-jumpbox-pip-${var.index}"
-  location = var.resource_group.location
+  name                = "${local.hostname}-jumpbox-pip-${var.index}"
+  location            = var.resource_group.location
   resource_group_name = var.resource_group.name
-  allocation_method = "Dynamic"
+  allocation_method   = "Dynamic"
 }
 
 resource "azurerm_network_interface" "jumpbox" {
@@ -16,7 +16,7 @@ resource "azurerm_network_interface" "jumpbox" {
     name                          = "primary"
     subnet_id                     = var.subnet_id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id = azurerm_public_ip.jumpbox-pip.id  
+    public_ip_address_id          = azurerm_public_ip.jumpbox-pip.id
   }
 }
 
@@ -50,7 +50,7 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
   location            = var.resource_group.location
   size                = var.sku
   admin_username      = var.admin_username
-  
+
   network_interface_ids = [
     azurerm_network_interface.jumpbox.id
   ]

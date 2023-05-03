@@ -5,6 +5,13 @@ resource "azurerm_user_assigned_identity" "managed-id" {
   name = "aks-user-assigned-managed-id"
 }
 
+/* Provide access to ACR from AKS */
+resource "azurerm_role_assignment" "mi-access-to-acr" {
+  scope                = azurerm_container_registry.demo.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.managed-id.principal_id
+}
+
 # cluster
 #
 resource "azurerm_role_assignment" "aks-mi-roles-vnet-rg" {
@@ -30,15 +37,15 @@ module "aks" {
   prefix = local.prefix
   suffix = local.suffix
 
-  user_assigned_identity  = azurerm_user_assigned_identity.managed-id
-  admin_username = var.admin_username
-  subnet_id      = azurerm_subnet.demo-cluster.id
-  resource_group = azurerm_resource_group.demo
+  user_assigned_identity = azurerm_user_assigned_identity.managed-id
+  admin_username         = var.admin_username
+  subnet_id              = azurerm_subnet.demo-cluster.id
+  resource_group         = azurerm_resource_group.demo
 
   # ACR
   container_registry_id = azurerm_container_registry.demo.id
 
-  cluster_name        = "demo-cluster"
+  cluster_name = "demo-cluster"
   aks_settings = {
     kubernetes_version      = "1.25.6"
     private_cluster_enabled = false
@@ -68,10 +75,10 @@ module "aks" {
 
   user_node_pools = {
     "notary" = {
-      vm_size                      = "standard_d4_v5"
-      node_count                   = 1
-      node_labels                  = null
-      node_taints                  = []
+      vm_size     = "standard_d4_v5"
+      node_count  = 1
+      node_labels = null
+      node_taints = []
     }
   }
 }
