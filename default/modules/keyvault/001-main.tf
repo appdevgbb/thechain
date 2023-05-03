@@ -4,10 +4,10 @@ resource "random_integer" "uid" {
 }
 
 locals {
-  prefix    = var.prefix
-  suffix    = var.suffix
-  uid       = random_integer.uid.result
+  prefix = var.prefix
+  suffix = var.suffix
+  uid    = random_integer.uid.result
 }
 
 data "azurerm_client_config" "current" {}
-data "azuread_client_config" current {}
+data "azuread_client_config" "current" {}

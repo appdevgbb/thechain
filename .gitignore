@@ -4,3 +4,4 @@ default/.terraform/*
 default/terraform.tfstate*
 default/.terraform.lock.hcl
 default/terraform.tfvars
+default/example/example-cert.crt

@@ -82,17 +82,18 @@ resource "azurerm_key_vault_certificate" "signingCert" {
     }
 
     secret_properties {
-      content_type = "application/x-pkcs12"
+      content_type = "application/x-pem-file"
     }
 
     x509_certificate_properties {
       extended_key_usage = ["1.3.6.1.5.5.7.3.3"]
 
       key_usage = [
-        "keyCertSign",
+        "digitalSignature",
       ]
 
-      subject            = "CN=example.com"
+
+      subject            = "CN=Test-Signer,C=US,ST=WA,O=notation"
       validity_in_months = 12
     }
   }

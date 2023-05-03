@@ -12,22 +12,22 @@ variable "kv_name" {
 }
 
 variable "acr_name" {
-  type = string
+  type    = string
   default = ""
 }
 
 variable "service_principal_object_id" {
-  type = string
+  type    = string
   default = ""
 }
 
 variable "service_principal_client_id" {
-  type = string
+  type    = string
   default = ""
 }
 
 variable "service_principal_password" {
-  type = string
+  type    = string
   default = ""
 }
 
