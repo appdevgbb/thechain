@@ -27,3 +27,7 @@ The target audience for this tutorial is developers and security minded professi
 The examples here will use Microsoft Azure. For more information please refer to the Before You Begin section.
 
 While Azure is used for basic infrastructure requirements most of the lessons learned in this tutorial can be applied to other platforms that support Kubernetes.
+
+Add in Notary v2 vs Cosign
+Diagram
+Steps
