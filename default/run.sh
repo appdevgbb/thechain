@@ -6,6 +6,49 @@
 # - jq
 # - terraform
 
+__usage="
+Available Commands:
+    [-x  action]        action to be executed.
+
+    Possible verbs are:
+        install         creates all of the resources in Azure and in Kubernetes
+        demo            deploy the scripts for the demo
+        destroy         deletes all of the components in Azure plus any KUBECONFIG and Terraform files
+        show            shows information about the demo environment (e.g.: connection strings)
+"
+
+usage() {
+  echo "usage: ${0##*/} [options]"
+  echo "${__usage/[[:space:]]/}"
+  exit 1
+}
+
+check_dependencies() {
+  # check if the dependencies are installed
+  local _NEEDED="az helm curl jq kubectl terraform"
+  local _DEP_FLAG="false"
+
+  echo -e "Checking dependencies ...\n"
+  for i in seq ${_NEEDED}; do
+    if hash "$i" 2>/dev/null; then
+      # do nothing
+      :
+    else
+      echo -e "\t $_ not installed".
+      _DEP_FLAG=true
+    fi
+  done
+
+  if [[ "${_DEP_FLAG}" == "true" ]]; then
+    echo -e "\nDependencies missing. Please fix that before proceeding"
+    exit 1
+  fi
+}
+
+show() {
+  terraform output -json | jq -r 'to_entries[] | [.key, .value.value]'
+}
+
 terraform_dance() {
   terraform init
   terraform plan
@@ -105,9 +148,116 @@ notation_sign_container_image() {
   notation sign --key $KEYNAME $ACR_NAME.azurecr.io/$IMAGE
 }
 
-terraform_dance
-load_env
-show_env
-notation_reset
-notation_add_cert
-notation_sign_container_image
+configure_aks() {
+  kubectl create namespace gatekeeper-system
+  kubectl create namespace demo
+  kubectl create secret docker-registry regcred \
+    --docker-server=${ACR_NAME}.azurecr.io \
+    --docker-username=${NOTATION_USERNAME} \
+    --docker-password=${NOTATION_PASSWORD} \
+    --docker-email=someone@example.com
+}
+
+gatekeeper_install() {
+  helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts
+
+  helm install gatekeeper/gatekeeper \
+    --name-template=gatekeeper \
+    --namespace gatekeeper-system --create-namespace \
+    --set enableExternalData=true \
+    --set validatingWebhookTimeoutSeconds=7
+}
+
+ratify_install() {
+  export PUBLIC_KEY=$(
+    az keyvault certificate show \
+      --name $KEYNAME \
+      --vault-name $KV_NAME \
+      -o json | jq -r '.cer' | base64 -d | openssl x509 -inform DER
+  )
+
+  kubectl config set-context --current --namespace=default
+
+  helm repo add ratify https://deislabs.github.io/ratify
+  helm install ratify \
+    ratify/ratify \
+    --set ratifyTestCert="$PUBLIC_KEY"
+}
+
+ratify_apply() {
+  curl -L https://deislabs.github.io/ratify/library/default/template.yaml -o template.yaml
+  curl -L https://deislabs.github.io/ratify/library/default/samples/constraint.yaml -o constraint.yaml
+  kubectl apply -f template.yaml
+  kubectl apply -f constraint.yaml
+  rm template.yaml constraint.yaml
+}
+
+deploy_signed_image() {
+  kubectl run net-monitor --image=$ACR_NAME.azurecr.io/$IMAGE
+  kubectl get pods
+}
+
+destroy() {
+  # remove all of the infrastructured
+  terraform destroy -auto-approve
+  rm -rf \
+    terraform.tfstate \
+    terraform.tfstate.backup \
+    tfplan \
+    .terraform \
+    .terraform.lock.hcl
+}
+
+do_demo_bootstrap() {
+  load_env
+  show_env
+  notation_reset
+  notation_add_cert
+  build_container_image
+  notation_sign_container_image
+  configure_aks
+  gatekeeper_install
+  ratify_install
+  ratify_apply
+  deploy_signed_image
+}
+
+run() {
+  terraform_dance
+  do_demo_bootstrap
+}
+
+exec_case() {
+  local _opt=$1
+
+  case ${_opt} in
+    install) checkDependencies && run ;;
+    destroy) destroy ;;
+    demo) do_demo_bootstrap ;;
+    show) show ;;
+    *) usage ;;
+  esac
+  unset _opt
+}
+
+while getopts "x:" opt; do
+  case $opt in
+    x)
+      exec_flag=true
+      EXEC_OPT="${OPTARG}"
+      ;;
+    *) usage ;;
+  esac
+done
+shift $((OPTIND - 1))
+
+if [ $OPTIND = 1 ]; then
+  usage
+  exit 0
+fi
+
+if [[ "${exec_flag}" == "true" ]]; then
+  exec_case "${EXEC_OPT}"
+fi
+
+exit 0
