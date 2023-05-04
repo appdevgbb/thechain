@@ -33,7 +33,7 @@ resource "azurerm_network_security_group" "jumpbox" {
     protocol                   = "*"
     source_port_range          = "*"
     destination_port_range     = "22"
-    source_address_prefix      = "*"
+    source_address_prefix      = data.http.myip.response_body
     destination_address_prefix = "*"
   }
 }
@@ -62,8 +62,11 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
 
   custom_data = base64encode(templatefile("${path.module}/config/cloud-init.yaml",
     {
-      admin_username = var.admin_username
-      ssh_key        = file("~/.ssh/id_rsa.pub")
+      admin_username   = var.admin_username
+      ssh_key          = file("~/.ssh/id_rsa.pub")
+      notation_version = var.notation_version
+      kv_version       = var.kv_version
+      arch = var.arch
   }))
 
   identity {
@@ -82,6 +85,7 @@ resource "azurerm_linux_virtual_machine" "jumpbox" {
     sku       = "18.04-LTS"
     version   = "latest"
   }
+  depends_on = [ azurerm_public_ip.jumpbox-pip ]
 }
 
 resource "azurerm_role_assignment" "jumpbox-contributor" {

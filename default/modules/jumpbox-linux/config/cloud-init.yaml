@@ -24,4 +24,11 @@ runcmd:
   - apt-get install apt-transport-https --yes
   - echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
   - apt-get update && apt-get install helm
+  - curl -Lo notation.tar.gz https://github.com/notaryproject/notation/releases/download/v${notation_version}/notation_${notation_version}_${arch}.tar.gz
+  - mkdir /home/${admin_username}/bin
+  - tar xvzf notation.tar.gz -C /usr/local/bin notation
+  - curl -Lo notation-azure-kv.tar.gz \
+    https://github.com/Azure/notation-azure-kv/releases/download/v${kv_version}/notation-azure-kv_${kv_version}_${arch}.tar.gz
+  - mkdir -p ~/.config/notation/plugins/azure-kv
+  - tar xvzf notation-azure-kv.tar.gz -C ~/.config/notation/plugins/azure-kv notation-azure-kv >/dev/null 2>&1
   - chown -R ${admin_username}:${admin_username} /home/${admin_username}

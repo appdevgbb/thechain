@@ -7,6 +7,6 @@ data "azurerm_kubernetes_cluster" "dev-cluster" {
   resource_group_name = var.resource_group.name
 }
 
-output "kube_config" {
-  value = data.azurerm_kubernetes_cluster.dev-cluster.kube_config
+output "kube_config_raw" {
+  value = data.azurerm_kubernetes_cluster.dev-cluster.kube_config_raw
 }

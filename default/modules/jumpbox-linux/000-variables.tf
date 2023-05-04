@@ -56,3 +56,15 @@ variable "kube_config" {
   type    = string
   default = ""
 }
+
+variable "notation_version" {
+  type = string
+}
+
+variable "kv_version" {
+  type = string
+}
+
+variable "arch" {
+  type = string
+}

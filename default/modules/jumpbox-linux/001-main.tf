@@ -5,3 +5,7 @@ locals {
 
   hostname = "${local.prefix}${local.workspace}${local.suffix}"
 }
+
+data "http" "myip" {
+  url = "https://api.ipify.org/"
+}

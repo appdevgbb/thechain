@@ -5,6 +5,8 @@
 # - Azure CLI
 # - jq
 # - terraform
+set -o pipefail
+set -u
 
 __usage="
 Available Commands:
@@ -25,7 +27,7 @@ usage() {
 
 check_dependencies() {
   # check if the dependencies are installed
-  local _NEEDED="az helm curl jq kubectl terraform"
+  local _NEEDED="az jq terraform"
   local _DEP_FLAG="false"
 
   echo -e "Checking dependencies ...\n"
@@ -53,6 +55,17 @@ terraform_dance() {
   terraform init
   terraform plan
   terraform apply -auto-approve
+  export TF_OUTPUT=$(terraform output -json)
+}
+
+# utilities
+copy_to_jumpbox() {
+  scp -oStrictHostKeyChecking=no $1 ${JUMPBOX_SSH}:$2
+}
+
+# Execute commands on the remote jump box
+run_on_jumpbox() {
+  ssh -oStrictHostKeyChecking=no ${JUMPBOX_SSH} -- $1
 }
 
 # fetch specific key values from the Terraform output
@@ -68,8 +81,7 @@ load_env() {
   export IMAGE_SOURCE=https://github.com/wabbit-networks/net-monitor.git#main
   export IMAGE_TAG=v1
   export IMAGE=${ACR_REPO}:$IMAGE_TAG
-
-  export TF_OUTPUT=$(terraform output -json)
+  export JUMPBOX_SSH=$(fetch jumpbox.value.ssh)
   export KEYNAME=$(fetch signing_key_name.value)
   export ACR_NAME=$(fetch container_registry_name.value)
   export KV_NAME=$(fetch azure_key_vault_name.value)
@@ -81,6 +93,8 @@ load_env() {
   export AZURE_CLIENT_SECRET=$(fetch service_principal.value.service_principal_password)
   export AZURE_CLIENT_ID=$(fetch service_principal.value.service_principal_client_id)
   export AZURE_TENANT_ID=$(fetch azure.value.tenant_id)
+  export AKS_CLUSTER_NAME=$(fetch kubernetes_cluster_name.value)
+  export RG_NAME=$(fetch rg_name.value)
 }
 
 show_env() {
@@ -99,6 +113,7 @@ show_env() {
   echo "AZURE_CLIENT_SECRET: " $AZURE_CLIENT_SECRET
   echo "AZURE_CLIENT_ID: " $AZURE_CLIENT_ID
   echo "AZURE_TENANT_ID: " $AZURE_TENANT_ID
+  echo "JUMPBOX_SSH: " $JUMPBOX_SSH
   echo "******************"
 }
 
@@ -134,9 +149,10 @@ notation_reset() {
 notation_add_cert() {
   rm -rf example/$CERT_PATH
   az keyvault certificate download --file example/$CERT_PATH --id $CERT_ID
-  notation key add $KEYNAME --id $KEY_ID --plugin azure-kv
-  notation cert add example/$CERT_PATH --store example --type ca
-  notation key list
+  # copy_to_jumpbox example/$CERT_PATH output/
+  # run_on_jumpbox "notation key add $KEYNAME --id $KEY_ID --plugin azure-kv;
+  notation cert add example/$CERT_PATH --store example --type ca;
+  notation key list;
   notation cert list
 }
 
@@ -146,6 +162,13 @@ build_container_image() {
 
 notation_sign_container_image() {
   notation sign --key $KEYNAME $ACR_NAME.azurecr.io/$IMAGE
+}
+
+setup_kubeconfig() {
+  az aks get-credentials -n ${AKS_CLUSTER_NAME} -g ${RG_NAME} -f kubeconfig
+  export KUBECONFIG=./kubeconfig
+  # run_on_jumpbox "mkdir -p ~/.kube"
+  # copy_to_jumpbox kubeconfig "~/.kube/config"
 }
 
 configure_aks() {
@@ -180,16 +203,13 @@ ratify_install() {
 
   helm repo add ratify https://deislabs.github.io/ratify
   helm install ratify \
-    ratify/ratify \
-    --set ratifyTestCert="$PUBLIC_KEY"
+    ratify/ratify --atomic #\
+    #--set ratifyTestCert="$PUBLIC_KEY"
 }
 
 ratify_apply() {
-  curl -L https://deislabs.github.io/ratify/library/default/template.yaml -o template.yaml
-  curl -L https://deislabs.github.io/ratify/library/default/samples/constraint.yaml -o constraint.yaml
-  kubectl apply -f template.yaml
-  kubectl apply -f constraint.yaml
-  rm template.yaml constraint.yaml
+  kubectl apply -f https://deislabs.github.io/ratify/library/default/template.yaml
+  kubectl apply -f https://deislabs.github.io/ratify/library/default/samples/constraint.yaml
 }
 
 deploy_signed_image() {
@@ -211,6 +231,7 @@ destroy() {
 do_demo_bootstrap() {
   load_env
   show_env
+  setup_kubeconfig
   notation_reset
   notation_add_cert
   build_container_image
@@ -231,7 +252,7 @@ exec_case() {
   local _opt=$1
 
   case ${_opt} in
-    install) checkDependencies && run ;;
+    install) check_dependencies && run ;;
     destroy) destroy ;;
     demo) do_demo_bootstrap ;;
     show) show ;;
