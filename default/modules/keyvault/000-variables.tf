@@ -48,3 +48,8 @@ variable "kv_settings" {
     sku_name                    = "standard"
   }
 }
+
+variable "user_assigned_identity" {
+  type = string 
+  default = ""
+}

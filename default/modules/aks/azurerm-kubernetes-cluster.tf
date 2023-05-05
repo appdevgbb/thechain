@@ -16,6 +16,7 @@ resource "azurerm_kubernetes_cluster" "dev" {
   /* workload id */
   workload_identity_enabled = true
   oidc_issuer_enabled       = true
+  
 
   default_node_pool {
     name                = var.default_node_pool.name

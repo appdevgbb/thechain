@@ -10,6 +10,7 @@ module "keyvault" {
   service_principal_object_id = azuread_service_principal.demo-application.object_id
   service_principal_client_id = azuread_service_principal.demo-application.application_id
   service_principal_password  = azuread_service_principal_password.demo-application.value
+  user_assigned_identity = azurerm_user_assigned_identity.managed-id.principal_id
 
   kv_name = "${local.prefix}demokv${local.suffix}"
   kv_settings = {

@@ -12,7 +12,7 @@ resource "azurerm_key_vault_access_policy" "spAccessPolicy" {
   ]
 
   certificate_permissions = [
-    "Get", "Create", "Delete", "Purge"
+    "Get", "Create", "Delete", "Purge", "List"
   ]
 }
 
@@ -22,7 +22,7 @@ resource "azurerm_key_vault_access_policy" "currentUserAccesPolicy" {
   object_id    = data.azuread_client_config.current.object_id
 
   key_permissions = [
-    "Get", "Sign"
+    "Get", "Sign", "Create", "Delete", "Purge", "List"
   ]
 
   secret_permissions = [
@@ -30,6 +30,24 @@ resource "azurerm_key_vault_access_policy" "currentUserAccesPolicy" {
   ]
 
   certificate_permissions = [
-    "Get", "Create", "Delete", "Purge"
+    "Get", "Create", "Delete", "Purge", "List"
+  ]
+}
+
+resource "azurerm_key_vault_access_policy" "workloadIdAccesPolicy" {
+  key_vault_id = azurerm_key_vault.kv.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = var.user_assigned_identity
+
+  key_permissions = [
+    "Get", "Sign", "Create", "Delete", "Purge", "List"
+  ]
+
+  secret_permissions = [
+    "Get", "Set", "List", "Delete", "Purge"
+  ]
+
+  certificate_permissions = [
+    "Get", "Create", "Delete", "Purge", "List"
   ]
 }

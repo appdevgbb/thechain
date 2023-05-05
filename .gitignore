@@ -5,3 +5,9 @@ default/terraform.tfstate*
 default/.terraform.lock.hcl
 default/terraform.tfvars
 default/example/example-cert.crt
+default/notary.crt
+.gitignore
+default/.DS_Store
+.DS_Store
+default/kubeconfig
+default/demo/notary.pem

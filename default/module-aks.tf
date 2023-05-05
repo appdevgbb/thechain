@@ -10,6 +10,7 @@ resource "azurerm_role_assignment" "mi-access-to-acr" {
   scope                = azurerm_container_registry.demo.id
   role_definition_name = "AcrPull"
   principal_id         = azurerm_user_assigned_identity.managed-id.principal_id
+  skip_service_principal_aad_check = true
 }
 
 # cluster

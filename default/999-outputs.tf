@@ -11,9 +11,12 @@ output "kubernetes_cluster_name" {
   value = module.aks.cluster_name
 }
 
-output "kube_config_raw" {
-  value     = module.aks.kube_config_raw
-  sensitive = true
+output "aks_managed_id" {
+  value = {
+    client_id = azurerm_user_assigned_identity.managed-id.client_id
+    object_id = azurerm_user_assigned_identity.managed-id.principal_id
+    name = azurerm_user_assigned_identity.managed-id.name
+  }
 }
 
 data "azurerm_client_config" "current" {}

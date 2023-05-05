@@ -50,8 +50,9 @@ resource "azurerm_key_vault_secret" "notationPassword" {
   key_vault_id = azurerm_key_vault.kv.id
   depends_on = [
     data.external.token,
+    azurerm_key_vault_access_policy.spAccessPolicy,
     azurerm_key_vault_access_policy.currentUserAccesPolicy
-  ]
+    ]
 }
 
 /* Certificate */
@@ -93,11 +94,12 @@ resource "azurerm_key_vault_certificate" "signingCert" {
       ]
 
 
-      subject            = "CN=Test-Signer,C=US,ST=WA,O=notation"
+      subject            = "CN=example,C=US,ST=WA,O=notation"
       validity_in_months = 12
     }
   }
   depends_on = [
-    azurerm_key_vault_access_policy.spAccessPolicy
+    azurerm_key_vault_access_policy.spAccessPolicy,
+    azurerm_key_vault_access_policy.currentUserAccesPolicy
   ]
 }

@@ -1,0 +1,16 @@
+{
+    "version": "1.0",
+    "trustPolicies": [
+        {
+            "name": "dcdemoACRnotary.azurecr.io-images",
+            "registryScopes": [ "frdemoACRnotary.azurecr.io/net-monitor" ],
+            "signatureVerification": {
+                "level" : "strict" 
+            },
+            "trustStores": [ "ca:example" ],
+            "trustedIdentities": [
+                "x509.subject: CN=example,C=US,ST=WA,O=notation"
+            ]
+        }
+    ]
+}
