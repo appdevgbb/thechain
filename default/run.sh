@@ -6,7 +6,7 @@
 # - jq
 # - terraform
 set -o pipefail
-set -u
+set -ux
 
 __usage="
 Available Commands:
@@ -55,7 +55,6 @@ terraform_dance() {
   terraform init
   terraform plan
   terraform apply -auto-approve
-  export TF_OUTPUT=$(terraform output -json)
 }
 
 # utilities
@@ -74,46 +73,53 @@ fetch() {
 }
 
 load_env() {
-  export NOTATION_VERSION=1.0.0-rc.4
-  export KV_VERSION=0.6.0
-  export ARCH=$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m)
+  export TF_OUTPUT=$(terraform output -json)
+  export ACR_NAME=$(fetch container_registry_name.value)
   export ACR_REPO=net-monitor
+  export AKS_CLUSTER_NAME=$(fetch kubernetes_cluster_name.value)
+  export ARCH=$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m)
+  export AZURE_CLIENT_ID=$(fetch service_principal.value.service_principal_client_id)
+  export AZURE_CLIENT_SECRET=$(fetch service_principal.value.service_principal_password)
+  export AZURE_TENANT_ID=$(fetch azure.value.tenant_id)
+  export KEY_NAME=$(fetch signing_key_name.value)
+  export KV_NAME=$(fetch azure_key_vault_name.value)
+  export CERT_ID=$(az keyvault certificate show --name $KEY_NAME --vault-name $KV_NAME --query id -o tsv)
+  export KEY_ID=$(az keyvault certificate show --name $KEY_NAME --vault-name $KV_NAME --query kid -o tsv)
+  export CERT_PATH=$KEY_NAME-cert.crt
+  export IDENTITY_CLIENT_ID=$(fetch aks_managed_id.value.client_id)
+  export IDENTITY_OBJECT_ID=$(fetch aks_managed_id.value.object_id)
+  export IDENTITY_CLIENT_NAME=$(fetch aks_managed_id.value.name)
   export IMAGE_SOURCE=https://github.com/wabbit-networks/net-monitor.git#main
   export IMAGE_TAG=v1
   export IMAGE=${ACR_REPO}:$IMAGE_TAG
   export JUMPBOX_SSH=$(fetch jumpbox.value.ssh)
-  export KEYNAME=$(fetch signing_key_name.value)
-  export ACR_NAME=$(fetch container_registry_name.value)
-  export KV_NAME=$(fetch azure_key_vault_name.value)
-  export CERT_ID=$(az keyvault certificate show --name $KEYNAME --vault-name $KV_NAME --query id -o tsv)
-  export KEY_ID=$(az keyvault certificate show --name $KEYNAME --vault-name $KV_NAME --query kid -o tsv)
-  export CERT_PATH=$KEYNAME-cert.crt
-  export NOTATION_USERNAME=$(fetch notation_username.value)
+  export KV_VERSION=0.6.0
   export NOTATION_PASSWORD=$(fetch notation_password.value)
-  export AZURE_CLIENT_SECRET=$(fetch service_principal.value.service_principal_password)
-  export AZURE_CLIENT_ID=$(fetch service_principal.value.service_principal_client_id)
-  export AZURE_TENANT_ID=$(fetch azure.value.tenant_id)
-  export AKS_CLUSTER_NAME=$(fetch kubernetes_cluster_name.value)
+  export NOTATION_USERNAME=$(fetch notation_username.value)
+  export NOTATION_VERSION=1.0.0-rc.4
   export RG_NAME=$(fetch rg_name.value)
+  export RATIFY_NAMESPACE="gatekeeper-system"
+  export VAULT_URI=$(az keyvault show --name ${KV_NAME} --resource-group ${RG_NAME} --query "properties.vaultUri
+" -otsv)
 }
 
 show_env() {
   echo "******************"
-  echo "NOTATION_VERSION: " $NOTATION_VERSION
-  echo "KV_VERSION: " $KV_VERSION
-  echo "ARCH: " $ARCH
-  echo "KEYNAME: " $KEYNAME
   echo "ACR_NAME: " $ACR_NAME
-  echo "KV_NAME: " $KV_NAME
-  echo "CERT_ID: " $CERT_ID
-  echo "KEY_ID: " $KEY_ID
-  echo "$CERT_PATH:" $CERT_PATH
-  echo "NOTATION_USERNAME: " $NOTATION_USERNAME
-  echo "NOTATION_PASSWORD: " $NOTATION_PASSWORD
-  echo "AZURE_CLIENT_SECRET: " $AZURE_CLIENT_SECRET
+  echo "ARCH: " $ARCH
   echo "AZURE_CLIENT_ID: " $AZURE_CLIENT_ID
+  echo "AZURE_CLIENT_SECRET: " $AZURE_CLIENT_SECRET
   echo "AZURE_TENANT_ID: " $AZURE_TENANT_ID
+  echo "CERT_ID: " $CERT_ID
+  echo "CERT_PATH:" $CERT_PATH
   echo "JUMPBOX_SSH: " $JUMPBOX_SSH
+  echo "KEY_ID: " $KEY_ID
+  echo "KEY_NAME: " $KEY_NAME
+  echo "KV_NAME: " $KV_NAME
+  echo "KV_VERSION: " $KV_VERSION
+  echo "NOTATION_PASSWORD: " $NOTATION_PASSWORD
+  echo "NOTATION_USERNAME: " $NOTATION_USERNAME
+  echo "NOTATION_VERSION: " $NOTATION_VERSION
   echo "******************"
 }
 
@@ -142,17 +148,16 @@ get_kv_plugin() {
 }
 
 notation_reset() {
-  notation cert delete -s example --type ca --all 2>/dev/null
-  notation key delete $KEYNAME 2>/dev/null
+  notation cert delete -s example --type ca -y --all 2>/dev/null
+  notation key delete $KEY_NAME 2>/dev/null
 }
 
 notation_add_cert() {
   rm -rf example/$CERT_PATH
-  az keyvault certificate download --file example/$CERT_PATH --id $CERT_ID
-  # copy_to_jumpbox example/$CERT_PATH output/
-  # run_on_jumpbox "notation key add $KEYNAME --id $KEY_ID --plugin azure-kv;
-  notation cert add example/$CERT_PATH --store example --type ca;
-  notation key list;
+  az keyvault certificate download --file example/$CERT_PATH --id $CERT_ID --encoding PEM
+  notation key add $KEY_NAME --id $KEY_ID --plugin azure-kv
+  notation cert add example/$CERT_PATH --store example --type ca
+  notation key list
   notation cert list
 }
 
@@ -161,20 +166,29 @@ build_container_image() {
 }
 
 notation_sign_container_image() {
-  notation sign --key $KEYNAME $ACR_NAME.azurecr.io/$IMAGE
+  notation sign --key $KEY_NAME $ACR_NAME.azurecr.io/$IMAGE
 }
 
 setup_kubeconfig() {
   az aks get-credentials -n ${AKS_CLUSTER_NAME} -g ${RG_NAME} -f kubeconfig
   export KUBECONFIG=./kubeconfig
-  # run_on_jumpbox "mkdir -p ~/.kube"
-  # copy_to_jumpbox kubeconfig "~/.kube/config"
+}
+
+create_federated_credential() {
+  AKS_OIDC_ISSUER="$(az aks show -g ${RG_NAME} -n ${AKS_CLUSTER_NAME} --query "oidcIssuerProfile.issuerUrl" -o tsv)"
+  echo "aks_oidc_issuer is "${AKS_OIDC_ISSUER}
+
+  az identity federated-credential create \
+    --name "DEMO" \
+    --identity-name ${IDENTITY_CLIENT_NAME} \
+    --resource-group ${RG_NAME} \
+    --issuer ${AKS_OIDC_ISSUER} \
+    --subject system:serviceaccount:${RATIFY_NAMESPACE}:ratify-admin
 }
 
 configure_aks() {
   kubectl create namespace gatekeeper-system
-  kubectl create namespace demo
-  kubectl create secret docker-registry regcred \
+  kubectl create -n gatekeeper-system secret docker-registry regcred \
     --docker-server=${ACR_NAME}.azurecr.io \
     --docker-username=${NOTATION_USERNAME} \
     --docker-password=${NOTATION_PASSWORD} \
@@ -188,23 +202,30 @@ gatekeeper_install() {
     --name-template=gatekeeper \
     --namespace gatekeeper-system --create-namespace \
     --set enableExternalData=true \
-    --set validatingWebhookTimeoutSeconds=7
+    --set validatingWebhookTimeoutSeconds=5 \
+    --set mutatingWebhookTimeoutSeconds=2
 }
 
 ratify_install() {
-  export PUBLIC_KEY=$(
-    az keyvault certificate show \
-      --name $KEYNAME \
-      --vault-name $KV_NAME \
-      -o json | jq -r '.cer' | base64 -d | openssl x509 -inform DER
-  )
+  # helm repo add ratify https://deislabs.github.io/ratify
+  # # download the notary verification certificate
+  # helm install ratify \
+  #   ratify/ratify --atomic \
+  #   --namespace gatekeeper-system \
+  #   --set-file notaryCert=./notary.crt
 
-  kubectl config set-context --current --namespace=default
-
-  helm repo add ratify https://deislabs.github.io/ratify
+  # Install Ratify
   helm install ratify \
-    ratify/ratify --atomic #\
-    #--set ratifyTestCert="$PUBLIC_KEY"
+    ratify/ratify --atomic \
+    --namespace ${RATIFY_NAMESPACE} --create-namespace \
+    --set akvCertConfig.enabled=true \
+    --set akvCertConfig.vaultURI=${VAULT_URI} \
+    --set akvCertConfig.cert1Name=${KEY_NAME} \
+    --set akvCertConfig.tenantId=${AZURE_TENANT_ID} \
+    --set oras.authProviders.azureWorkloadIdentityEnabled=true \
+    --set azureWorkloadIdentity.clientId=${IDENTITY_CLIENT_ID}
+
+  kubectl patch sa ratify-admin 
 }
 
 ratify_apply() {
@@ -226,6 +247,7 @@ destroy() {
     tfplan \
     .terraform \
     .terraform.lock.hcl
+  do_demo_destroy
 }
 
 do_demo_bootstrap() {
@@ -237,15 +259,24 @@ do_demo_bootstrap() {
   build_container_image
   notation_sign_container_image
   configure_aks
+  create_federated_credential
   gatekeeper_install
   ratify_install
   ratify_apply
   deploy_signed_image
 }
 
+do_demo_destroy() {
+  helm uninstall -n gatekeeper-system gatekeeper
+  helm uninstall -n gatekeeper-system ratify
+  kubectl delete ns demo
+  kubectl delete ns gatekeeper-system
+  kubectl delete secret regcred
+  notation_reset
+}
 run() {
   terraform_dance
-  do_demo_bootstrap
+  echo "Ready to deploy the demo components now. Run ./run.sh -x demo".
 }
 
 exec_case() {
@@ -255,6 +286,7 @@ exec_case() {
     install) check_dependencies && run ;;
     destroy) destroy ;;
     demo) do_demo_bootstrap ;;
+    demo-destroy) do_demo_destroy ;;
     show) show ;;
     *) usage ;;
   esac
